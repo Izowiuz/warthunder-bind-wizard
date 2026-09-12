@@ -23,7 +23,14 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MAP = os.path.normpath(os.path.join(HERE, '..', 'sim-device-map'))
+#: the shared hardware map. Sibling directory by default; SIM_DEVICE_MAP
+#: overrides it, for a clone that does not sit next to this one.
+MAP = os.environ.get('SIM_DEVICE_MAP') or os.path.normpath(
+    os.path.join(HERE, '..', 'sim-device-map'))
+if not os.path.isdir(MAP):
+    raise SystemExit(
+        f'no device map at {MAP}\n'
+        'clone sim-device-map next to this repo, or set SIM_DEVICE_MAP')
 if MAP not in sys.path:
     sys.path.insert(0, MAP)
 
@@ -362,8 +369,15 @@ def axis_of(devs, want):
                               if a.kind in ('slider', 'lever')
                               and a.safe_for_absolute), None)
     if want == 'zoom':
+        # A dial first, to match DCS: the same hand does the same thing in both
+        # sims, which is worth more than either sim's local optimum. It rests
+        # centred rather than at zero, so the view starts part-zoomed -- live
+        # with it, or fall back to a slider that rests at its minimum.
+        dial = next((a for a in thr.axes(kind='dial') if a.proportional), None)
+        if dial:
+            return 'throttle', dial
         return 'throttle', next((a for a in thr.axes()
-                                 if a.kind in ('slider', 'dial')
+                                 if a.kind == 'slider'
                                  and a.safe_for_absolute
                                  and a.proportional), None)
     return None, None

@@ -81,7 +81,7 @@ Buttons 0–50, axes 0–6
 | Thumb mini-stick | `0` | camx | helicopter_camx |
 | Thumb mini-stick | `1` | camy | helicopter_camy |
 | Left throttle lever | `2` | throttle | helicopter_collective |
-| Left side dial | `5` | zoom | — |
+| Right side dial | `6` | zoom | — |
 
 ## Left free
 
@@ -90,7 +90,7 @@ wanted their shape.
 
 | Control | Buttons | Reach |
 |---|---|---|
-| Right side dial (dial) | 8 | needs letting go |
+| Left side dial (dial) | 1 | needs letting go |
 | Thumb hat (hat4) | 18, 19, 20, 21, 17 | thumb, without releasing grip |
 | T4 rocker (hat2) | 35, 36 | needs letting go |
 | T5 rocker (hat2) | 37, 38 | needs letting go |

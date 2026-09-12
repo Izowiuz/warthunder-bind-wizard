@@ -92,6 +92,21 @@ action, and decodes the binary `.blk` presets -- zstd against a dictionary
 shipped beside them, key names in a nametable shared across the archive -- to
 count what a HOTAS is expected to carry. Re-run it after a game patch.
 
+## Flow
+
+```bash
+./harvest.py                 # once, and after a game patch adds actions
+./plan.py --why              # what goes where, and why
+./wt-bind-preset.py          # write it into machine.blk (game closed)
+./plan.py --sheet --html     # KNEEBOARD.md + the columns page
+```
+
+Change the hardware: capture it in [`sim-device-map`](../sim-device-map), then
+re-run `plan.py`. Nothing here describes your devices.
+
+`plan.py` needs that repo as a sibling directory, or `SIM_DEVICE_MAP` pointing
+at it.
+
 ## Usage
 
 ```bash
