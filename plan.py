@@ -60,6 +60,24 @@ def is_heli(action):
     return action.endswith('_HELICOPTER') or action.startswith('ID_HELICOPTER')
 
 
+def contexts(action):
+    """Which vehicle contexts an action actually applies to.
+
+    The trap: War Thunder names most helicopter actions with an `_HELICOPTER`
+    suffix and a few with an `ID_HELICOPTER_` prefix, so a twin has to be
+    looked for in BOTH forms. And an action with no twin in either form is
+    SHARED -- it applies to helicopters as well as aircraft, whatever we meant
+    by putting it there. `ID_TRIM_ELEVATOR_MINUS` has no helicopter twin, so it
+    is live in a helicopter too.
+    """
+    if is_heli(action):
+        return ('heli',)
+    twins = (action + '_HELICOPTER', action.replace('ID_', 'ID_HELICOPTER_', 1))
+    if any(t in ACTIONS for t in twins):
+        return ('air',)
+    return ('air', 'heli')
+
+
 class Need:
     """One thing a pilot has to be able to do, and the shape it wants.
 
@@ -107,7 +125,7 @@ NEEDS = [
          device='stick'),
 
     Need('Views', 'hat4',
-         air=['ID_CAMERA_DEFAULT', 'ID_CAMERA_BOMBVIEW', 'ID_CAMERA_VIEW_DOWN',
+         air=['ID_CAMERA_DEFAULT', '', 'ID_CAMERA_VIEW_DOWN',
               'ID_CAMERA_VIEW_BACK'],
          heli=['ID_CAMERA_DEFAULT', 'ID_CAMERA_GUNNER_HELICOPTER',
                'ID_CAMERA_VIEW_DOWN', 'ID_CAMERA_VIEW_BACK'],
@@ -130,7 +148,7 @@ NEEDS = [
     Need('Trim', 'hat4',
          air=['ID_TRIM_ELEVATOR_PLUS', 'ID_TRIM_AILERONS_PLUS',
               'ID_TRIM_ELEVATOR_MINUS', 'ID_TRIM_AILERONS_MINUS'],
-         heli=['', '', 'ID_HELICOPTER_TRIM_RESET', ''],
+         heli=(),
          push='ID_TRIM', heli_push='ID_HELICOPTER_TRIM', suits='trim',
          reflex=True, device='stick',
          note='hat trim is the DCS habit; ID_TRIM on the push is the WT idiom'),
@@ -219,6 +237,28 @@ AXIS_NEEDS = [
     ('brake_right',             'brake',        False),
     ('zoom',                    'zoom',         False),
 ]
+
+
+#: Extra deadzone for a named axis, overriding the rule in build().
+#
+# The stick twist is the rudder, and in War Thunder that is a problem no other
+# sim of the four has. Hauling the stick back while rolling rotates the
+# forearm, so yaw creeps in on its own -- and WT is the one that wants reflex
+# shooting, which is when it happens. DCS and MSFS are flown deliberately and
+# never showed it, so this stays local to this repo rather than becoming a
+# device-map fact.
+#
+# Only `rudder` widens. `helicopter_pedals` is the SAME physical axis but not
+# the same kind of control: heli yaw is held continuously and a wide dead patch
+# makes a hover harder, where a plane's rudder is tapped.
+#
+# WT's own `nonlinearity: 2.5` already softens the centre, so the felt dead
+# region is wider than the number. The other half of this -- capping authority
+# with `rudderMultiplier` -- lives OUTSIDE the controls{} block that
+# wt-bind-preset.py rewrites, so it is a slider in the game's own UI, not ours.
+#
+# A stopgap: VIRPIL pedals are on order. Delete this when they arrive.
+AXIS_DEADZONE = {'rudder': 0.10}
 
 
 def devices():
@@ -393,8 +433,10 @@ def build():
         role, a = axis_of(devs, want)
         if a is None:
             continue
-        dead = 0.06 if a.kind.startswith('mini-stick') else (
-            0 if a.kind == 'lever' else 0.02)
+        dead = AXIS_DEADZONE.get(name)
+        if dead is None:
+            dead = 0.06 if a.kind.startswith('mini-stick') else (
+                0 if a.kind == 'lever' else 0.02)
         axes.append((name, role, a.index, inverse, {'innerDeadzone': dead}))
 
     placed, emitted = [], set()
@@ -423,15 +465,30 @@ def build():
                 emitted.add((role, c.push, pushid))
                 buttons.append((role, c.push, pushid, f'{c.label} — push'))
 
-    # no button may carry two different actions in the same context
-    seen = {}
-    for role, idx, action, _ in buttons:
-        ctx = 'heli' if is_heli(action) else 'air'
-        key = (role, idx, ctx)
-        if key in seen and seen[key] != action:
-            print(f'!! {role} button {idx} ({ctx}): {seen[key]} and {action}',
-                  file=sys.stderr)
-        seen[key] = action
+    # No button may carry two different actions in one context: the game
+    # silently drops one of them, and which one is not worth relying on.
+    #
+    # This is stricter than it looks. An aircraft action with no helicopter
+    # twin is live in helicopters too, so pairing it with a helicopter-specific
+    # action on the same slot clashes even though the two names look unrelated
+    # -- which is how the views hat ended up with the bomb sight fighting the
+    # gunner view, and the trim hat with elevator trim fighting trim reset.
+    #
+    # That is a mistake in NEEDS, not something to paper over at write time,
+    # so it stops here rather than warning.
+    seen, clashes = {}, []
+    for role, idx, action, where in buttons:
+        for ctx in contexts(action):
+            key = (role, idx, ctx)
+            if key in seen and seen[key] != action:
+                clashes.append(f'{role} button {idx} ({ctx}): '
+                               f'{seen[key]} and {action}   [{where}]')
+            seen[key] = action
+    if clashes:
+        for c in clashes:
+            print(f'!! {c}', file=sys.stderr)
+        sys.exit('refusing to plan: those two would share a button in one '
+                 'vehicle context and the game keeps only one. Fix NEEDS.')
     return axes, buttons, placed, unmet, free
 
 

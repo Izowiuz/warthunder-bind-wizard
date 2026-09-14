@@ -277,12 +277,19 @@ def main():
 
     # ---- conflicts: one physical button, two actions in one context ------
     def contexts(action):
-        # most helicopter actions suffix _HELICOPTER, a few prefix it
+        # Most helicopter actions suffix _HELICOPTER, a few prefix it -- and
+        # the twin has to be looked for in BOTH forms. Looking only for the
+        # suffix made `ID_TRIM` ("Trim aircraft") look like a shared action,
+        # when its twin is `ID_HELICOPTER_TRIM` ("Trim helicopter"), and this
+        # checker then reported a clash that does not exist. Same prefix /
+        # suffix inconsistency as in plan.is_heli(), one layer further down.
         if action.endswith(HELI_SUFFIX) or action.startswith('ID_HELICOPTER'):
             return ['heli']
-        if action + HELI_SUFFIX in known_actions:
+        twins = (action + HELI_SUFFIX,
+                 action.replace('ID_', 'ID_HELICOPTER_', 1))
+        if any(t in known_actions for t in twins):
             return ['air']          # the game has a separate heli twin
-        return ['air', 'heli']      # no twin: the action is shared
+        return ['air', 'heli']      # no twin: the action applies to both
 
     seen = {}
     for role, idx, action, _ in BUTTONS:
@@ -307,13 +314,32 @@ def main():
             order.append(name)
         by_action[name].append(sub)
 
+    # The joystick half of this block belongs to the plan: strip EVERY
+    # joyButton and put back only what the plan asks for.
+    #
+    # Stripping only the PLANNED actions meant the plan could add and change
+    # but never remove. Drop something from NEEDS and its old button stayed
+    # live in the game, invisibly fighting whatever took its place -- which is
+    # exactly what happened when the bomb sight and the helicopter trim reset
+    # were taken off their hats and stayed bound anyway.
+    #
+    # Keyboard and mouse bindings are left alone. They are the game's business,
+    # not the plan's.
     planned = {a for _, _, a, _ in BUTTONS}
-    for action in planned:
-        kept = [b for b in by_action.get(action, [])
+    dropped = []
+    for action in list(by_action):
+        kept = [b for b in by_action[action]
                 if not any(x[0] == 'val' and x[1] == 'joyButton' for x in b)]
+        if len(kept) != len(by_action[action]) and action not in planned:
+            dropped.append(action)
         by_action[action] = kept
+    for action in planned:
         if action not in order:
             order.append(action)
+    if dropped:
+        print('  -- joystick bindings cleared (nothing in the plan wants them):')
+        for a in sorted(dropped):
+            print(f'       {a}   {lang["actions"].get(a, [a])[0]}')
 
     for role, idx, action, _ in BUTTONS:
         wt = dev[role]['btn_off'] + idx
