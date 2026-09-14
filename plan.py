@@ -260,6 +260,21 @@ AXIS_NEEDS = [
 # A stopgap: VIRPIL pedals are on order. Delete this when they arrive.
 AXIS_DEADZONE = {'rudder': 0.10}
 
+#: Axis properties the plan wants to OWN, overriding whatever the game's own
+#: axis wizard left in the file. Everything not named here is still preserved,
+#: because that wizard knows about calibration and we do not.
+#
+# zoom kMul: the dial is not sprung -- it stays where you leave it, and it was
+# measured resting at 27535 of 32767, deep in the top of its travel. `kMul: 2`
+# doubles the gain, so the output is already clamped at full zoom across the
+# whole upper half of the dial. Nothing happens until you wind back past the
+# middle, which is exactly the "I have to turn it a long way before it lets go"
+# that shows up when the sight view sets its own zoom. At 1 the whole dial maps
+# to the whole range with no plateau.
+AXIS_PROPS = {
+    'zoom': {'kMul': 1.0},
+}
+
 
 def devices():
     out = {}
@@ -437,7 +452,9 @@ def build():
         if dead is None:
             dead = 0.06 if a.kind.startswith('mini-stick') else (
                 0 if a.kind == 'lever' else 0.02)
-        axes.append((name, role, a.index, inverse, {'innerDeadzone': dead}))
+        props = {'innerDeadzone': dead}
+        props.update(AXIS_PROPS.get(name, {}))
+        axes.append((name, role, a.index, inverse, props))
 
     placed, emitted = [], set()
     for need, role, c, _ in chosen:

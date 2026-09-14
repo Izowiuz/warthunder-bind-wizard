@@ -373,9 +373,26 @@ def main():
         new.append(('val', 'axisId', 'i', str(wt)))
         t, v = num(props.get('innerDeadzone', 0.02))
         new.append(('val', 'innerDeadzone', t, v))
-        # keep the calibration the game's own axis wizard wrote
+        # Keep the calibration the game's own axis wizard wrote -- unless the
+        # plan asks for a value, in which case the plan wins and says so.
         for k in ('kAdd', 'kMul', 'nonlinearity', 'relative'):
-            if k in old:
+            if k in props:
+                v = props[k]
+                if isinstance(v, bool):
+                    new.append(('val', k, 'b', 'yes' if v else 'no'))
+                else:
+                    t, sv = num(v)
+                    # keep the type the game itself used for this property --
+                    # num() makes a whole number an int, and writing kMul:i=1
+                    # where the game writes kMul:r=1 is a needless difference
+                    if k in old and old[k][0] in ('r', 'i'):
+                        t = old[k][0]
+                        if t == 'r' and '.' not in sv:
+                            sv += '.0'
+                    new.append(('val', k, t, sv))
+                if k in old and old[k][1] != new[-1][3]:
+                    print(f'  -- {name}.{k}: {old[k][1]} -> {new[-1][3]}')
+            elif k in old:
                 new.append(('val', k, old[k][0], old[k][1]))
         if inverse:
             new.append(('val', 'inverse', 'b', 'yes'))
